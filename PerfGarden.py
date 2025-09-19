@@ -10,9 +10,9 @@ import numpy as np  # pip install numpy
 import yaml  # pip install pyyaml
 
 
-## 香蒲：图片模板匹配
+# 猫尾草：图片模板匹配
 def cattail(
-    img_path: str, template_path: str, threshold: float = 0.8, crop: int = 0
+    img_path: str, template_path: str, threshold: float = 0.9, crop: int = 0
 ) -> tuple:
     """
     模板匹配检测函数（支持区域裁剪）
@@ -57,7 +57,7 @@ def cattail(
         if crop > 0:
             # 保留底部区域
             new_h = max(1, int(h * (100 - crop) / 100))
-            img = img[h - new_h : h, :]
+            img = img[h - new_h: h, :]
         else:
             # 保留顶部区域
             new_h = max(1, int(h * abs(crop) / 100))
@@ -83,6 +83,8 @@ def cattail(
     matched = confidence >= threshold
 
     return (status, matched, confidence, duration)
+
+# 三叶草：图片模板匹配
 
 
 def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
@@ -111,7 +113,8 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
 
     # 安全读取图片为灰度图
     try:
-        gray = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+        gray = cv2.imdecode(np.fromfile(
+            img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             return ("EB02", False, 0, time.time() - start_time)
     except Exception as e:
@@ -123,7 +126,7 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
         if crop > 0:
             # 保留底部区域
             new_h = max(1, int(h * (100 - crop) / 100))
-            gray = gray[h - new_h : h, :]
+            gray = gray[h - new_h: h, :]
         else:
             # 保留顶部区域
             new_h = max(1, int(h * abs(crop) / 100))
@@ -136,12 +139,12 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
     circlEB = cv2.HoughCircles(
         blur,
         cv2.HOUGH_GRADIENT,
-        dp=1,  # 保持默认分辨率
-        minDist=100,  # 增大圆心最小距离
-        param1=100,  # Canny边缘检测参数
-        param2=70,  # 增大累加器阈值(关键参数，越大检测越严格)
-        minRadius=10,  # 设置最小半径，避免小型圆形文字
-        maxRadius=50,  # 根据实际需要调整最大半径
+        dp=1,           # 图像分辨率与累加器分辨率之比（1:1保持原始分辨率，值越大检测越粗糙）
+        minDist=100,    # 圆心间最小距离（防止重叠圆检测，需根据目标间距调整）
+        param1=90,     # Canny边缘检测高阈值（值越大边缘检测要求越严格，建议50-150）
+        param2=32,      # 圆心累加器阈值（值越小检测越宽松，假圆越多，建议10-50）
+        minRadius=20,   # 目标最小半径（根据实际目标尺寸设置下限）
+        maxRadius=25    # 目标最大半径（根据实际目标尺寸设置上限）
     )
 
     # 计算结果
@@ -150,14 +153,15 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
         confidence = len(circlEB[0])
 
     # 判断是否匹配
-    matched = confidence == threshold
+    # matched = confidence == threshold
+    matched = confidence >= threshold
 
     duration = time.time() - start_time
 
     return ("PASS", matched, confidence, duration)
 
 
-## 核心逻辑调度
+# 核心逻辑调度
 def trails(
     image_files,
     folder_path,
@@ -219,7 +223,7 @@ def trails(
             detector_kwargs["threshold"] = threshold
 
         result = detector_func(**detector_kwargs)  # 使用指定的检测函数
-        # print(f"{img_file}: {result}")
+        # print(f"{img_file}: {result}")  # 🧐 详细调试日志
 
         # 解包结果元组
         status, matched, confidence, duration = result
@@ -310,7 +314,8 @@ def gate_from_yaml(yaml_path, max_threads=None):
                 continue
 
             # 更新任务类型计数和表头
-            task_type_counts[task_type] = task_type_counts.get(task_type, 0) + 1
+            task_type_counts[task_type] = task_type_counts.get(
+                task_type, 0) + 1
             task_headers.append(f"{task_type}{task_type_counts[task_type]}")
 
             # 提取任务参数
@@ -319,10 +324,22 @@ def gate_from_yaml(yaml_path, max_threads=None):
                 # 对于skip指令，直接存储要跳过的图片数
                 task_kwargs["skip_count"] = task_config
             else:
-                for param in task_config:
-                    for key, value in param.items():
+                # 检测使用的是旧版格式还是新版格式
+                if isinstance(task_config, list):
+                    # 旧版格式: task_config 是一个参数字典的列表
+                    for param in task_config:
+                        for key, value in param.items():
+                            if key == "template":
+                                task_kwargs["template_path"] = os.path.normpath(
+                                    value)
+                            else:
+                                task_kwargs[key] = value
+                else:
+                    # 新版格式: task_config 是一个字典
+                    for key, value in task_config.items():
                         if key == "template":
-                            task_kwargs["template_path"] = os.path.normpath(value)
+                            task_kwargs["template_path"] = os.path.normpath(
+                                value)
                         else:
                             task_kwargs[key] = value
 
@@ -464,17 +481,41 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_lock):
         # 更新剩余图片列表
         if matched_file in remaining_files:
             match_index = remaining_files.index(matched_file)
-            remaining_files = remaining_files[match_index + 1 :]
+            remaining_files = remaining_files[match_index + 1:]
             print(
                 f"【继续】子文件夹 {subfolder_name}: 继续已处理图片，剩余 {len(remaining_files)} 张图片"
             )
 
-    # 线程安全地写入CSV
-    with csv_lock:
-        with open(csv_filename, "a", newline="", encoding="utf-8-sig") as f:
-            csv.writer(f).writerow(csv_row)
-        print(f"【写入】子文件夹 {subfolder_name} 的结果已写入CSV")
+    # # 线程安全地写入CSV
+    # with csv_lock:
+    #     with open(csv_filename, "a", newline="", encoding="utf-8-sig") as f:
+    #         csv.writer(f).writerow(csv_row)
+    #     print(f"【写入】子文件夹 {subfolder_name} 的结果已写入CSV")
 
+    # return subfolder_name, subfolder_results, total_time
+
+    # 线程安全地写入CSV（带重试机制）
+    max_retries = 3
+    retry_delay = 0.1  # 每次重试间隔0.1秒
+    
+    with csv_lock:
+        for attempt in range(max_retries + 1):  # 0,1,2,3 共4次尝试（首次+3次重试）
+            try:
+                with open(csv_filename, "a", newline="", encoding="utf-8-sig") as f:
+                    csv.writer(f).writerow(csv_row)
+                print(f"【写入】子文件夹 {subfolder_name} 的结果已写入CSV")
+                break  # 成功则跳出重试循环
+            except PermissionError as e:
+                if attempt < max_retries:
+                    print(f"【警告】写入CSV时权限错误（尝试 {attempt+1}/{max_retries}）: {str(e)}")
+                    time.sleep(retry_delay * (attempt + 1))  # 递增等待时间
+                else:
+                    print(f"🔴【错误】CSV写入失败，已达最大重试次数: {str(e)}")
+                    raise  # 重试耗尽后抛出原异常
+            except Exception as e:
+                print(f"🔴【错误】CSV写入时发生意外错误: {str(e)}")
+                raise  # 非权限错误直接抛出
+    
     return subfolder_name, subfolder_results, total_time
 
 
@@ -545,7 +586,7 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
 
 # 使用示例
 if __name__ == "__main__":
-    yaml_path = r"C:\Users……\测试\config.yml"  # 替换为实际的YAML文件路径
+    yaml_path = r"D:\code\garden\……\Q.yml" # 替换为实际的YAML文件路径
 
     # 调用函数并获取结果
     results = gate_from_yaml(yaml_path)

@@ -1,6 +1,7 @@
 import concurrent.futures
 import csv
 import os
+import queue
 import re
 import threading
 import time
@@ -10,7 +11,7 @@ import numpy as np  # pip install numpy
 import yaml  # pip install pyyaml
 
 
-# 猫尾草：图片模板匹配
+# 猫尾草：图片模板匹配，按钮标题等查找静态首尾帧
 def cattail(
     img_path: str, template_path: str, threshold: float = 0.9, crop: int = 0
 ) -> tuple:
@@ -84,8 +85,110 @@ def cattail(
 
     return (status, matched, confidence, duration)
 
-# 三叶草：图片模板匹配
+# 仙人掌：图片差异区域占比，容忍局部加载动画，到开始输出文字气泡
+def cactus(
+    img_path: str, template_path: str, threshold: float = 1.0, crop: int = 0, enable_denoising: bool = False, acceleration: int = 2
+) -> tuple:
+    """
+    图像差异检测函数（支持区域裁剪、加速和降噪控制）
 
+    参数：
+    img_path: 待检测图片路径
+    template_path: 模板图片路径（用于对比的基准图片）
+    threshold: 差异百分比阈值 (0~100)，默认为1%
+    crop: 裁剪比例 (-99~99)
+          >0 从底部向上裁剪，保留底部
+          <0 从顶部向下裁剪，保留顶部
+          =0 不裁剪
+    enable_denoising: 是否启用降噪处理，默认关闭
+    acceleration: 加速倍数 (1=原始, 2=2倍加速, 4=4倍加速)，默认2倍
+
+    返回：
+    (status, matched, confidence, duration)
+    status: 状态码 ("PASS"/"EC01"/"EC02"/"EC03")
+    matched: 是否检测到变化 (True/False)
+    confidence: 差异百分比（置信度）
+    duration: 执行耗时
+    """
+    start_time = time.time()
+
+    # 参数校验
+    if not (0 <= threshold <= 100) or not (-99 <= crop <= 99) or acceleration not in [1, 2, 4]:
+        duration = round(time.time() - start_time, 4)
+        return ("EC01", False, 0.00, duration)
+
+    # 安全读取图片
+    def _safe_read_grayscale(path):
+        try:
+            return cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+        except:
+            return None
+
+    img1 = _safe_read_grayscale(img_path)
+    img2 = _safe_read_grayscale(template_path)
+
+    # 读取失败判断
+    if img1 is None or img2 is None:
+        duration = round(time.time() - start_time, 4)
+        return ("EC02", False, 0.00, duration)
+
+    # 执行裁剪操作
+    if crop != 0:
+        h, w = img1.shape[:2]
+        if crop > 0:
+            # 保留底部区域
+            new_h = max(1, int(h * (100 - crop) / 100))
+            img1 = img1[h - new_h: h, :]
+        else:
+            # 保留顶部区域
+            new_h = max(1, int(h * abs(crop) / 100))
+            img1 = img1[0:new_h, :]
+            
+        # 对模板图片执行相同裁剪
+        h2, w2 = img2.shape[:2]
+        if crop > 0:
+            # 保留底部区域
+            new_h2 = max(1, int(h2 * (100 - crop) / 100))
+            img2 = img2[h2 - new_h2: h2, :]
+        else:
+            # 保留顶部区域
+            new_h2 = max(1, int(h2 * abs(crop) / 100))
+            img2 = img2[0:new_h2, :]
+
+    # 图像尺寸校验
+    if img1.shape != img2.shape:
+        duration = round(time.time() - start_time, 4)
+        return ("EC03", False, 0.00, duration)
+
+    # 下采样加速
+    if acceleration > 1:
+        new_h, new_w = img1.shape[0] // acceleration, img1.shape[1] // acceleration
+        img1 = cv2.resize(img1, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        img2 = cv2.resize(img2, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # 计算绝对差异并二值化
+    abs_diff = cv2.absdiff(img1, img2)
+    _, diff_mask = cv2.threshold(abs_diff, 3, 255, cv2.THRESH_BINARY)
+
+    # 可选的降噪处理
+    if enable_denoising:
+        kernel = np.ones((2, 2), np.uint8)
+        diff_mask = cv2.morphologyEx(diff_mask, cv2.MORPH_OPEN, kernel)
+
+    # 计算变化百分比
+    changed_percentage = np.count_nonzero(diff_mask) / diff_mask.size * 100
+    confidence = round(changed_percentage, 2)
+
+    # 判断是否超过阈值
+    matched = confidence >= threshold
+    
+    duration = round(time.time() - start_time, 4)
+    status = "PASS"
+
+    return (status, matched, confidence, duration)
+
+
+# 三叶草：图片模板匹配
 
 def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
     """
@@ -199,10 +302,16 @@ def trails(
     if detector_func is None:
         detector_func = cattail
 
+    # 仙人掌特殊处理：如果没有模板且是cactus函数，使用第一张图片作为模板
+    if detector_func == cactus and template_path is None and len(image_files) > 0:
+        template_path = os.path.join(folder_path, image_files[0])
+        print(f"🌵【cactus】使用第一张图片作为模板: {image_files[0]}")
+
     i = leap - 1  # 起始索引（对应第leap张图片）
     waiting_for_fade = False  # 是否在等待匹配消失
     first_match = None  # 第一个匹配的图片
     result_found = False  # 是否找到结果
+    result = None  # 初始化result变量
 
     trails_status = "PASS"  # 返回状态
     trails_matched = None  # 返回文件名
@@ -223,7 +332,7 @@ def trails(
             detector_kwargs["threshold"] = threshold
 
         result = detector_func(**detector_kwargs)  # 使用指定的检测函数
-        # print(f"{img_file}: {result}")  # 🧐 详细调试日志
+        print(f"{img_file}: {result}")  # 🧐 详细调试日志
 
         # 解包结果元组
         status, matched, confidence, duration = result
@@ -334,7 +443,7 @@ def gate_from_yaml(yaml_path, max_threads=None):
                                     value)
                             else:
                                 task_kwargs[key] = value
-                else:
+                elif isinstance(task_config, dict):
                     # 新版格式: task_config 是一个字典
                     for key, value in task_config.items():
                         if key == "template":
@@ -342,6 +451,12 @@ def gate_from_yaml(yaml_path, max_threads=None):
                                 value)
                         else:
                             task_kwargs[key] = value
+                elif task_config is None:
+                    # 处理无参数格式: task_config 是 None（如 "- cactus"）
+                    pass  # 无需添加额外参数，使用默认参数
+                else:
+                    # 其他未知格式，记录警告
+                    print(f"⚠️【警告】未知的任务配置格式: {task_type} = {task_config}，将使用默认参数")
 
             tasks.append(task_kwargs)
 
@@ -360,7 +475,7 @@ def gate_from_yaml(yaml_path, max_threads=None):
     return gate_multi_thread(parent_folder, tasks, task_headers, max_threads)
 
 
-def process_subfolder(subfolder, tasks, csv_filename, csv_lock):
+def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
     """
     处理单个子文件夹的所有任务，在单独线程中执行
 
@@ -368,7 +483,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_lock):
         subfolder: 子文件夹路径
         tasks: 任务参数列表
         csv_filename: CSV结果文件路径
-        csv_lock: 用于CSV写入的线程锁
+        csv_queue: 用于异步写入的队列
 
     返回:
         (subfolder_name, subfolder_results, total_time): 处理结果和耗时
@@ -435,6 +550,8 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_lock):
             detector_func = cattail
         elif task_type == "blover":
             detector_func = blover
+        elif task_type == "cactus":
+            detector_func = cactus
         # 可以在这里添加更多检测器函数的映射
         else:
             print(f"⚠️【警告】未知的任务类型 {task_type}，默认使用 cattail")
@@ -486,37 +603,59 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_lock):
                 f"【继续】子文件夹 {subfolder_name}: 继续已处理图片，剩余 {len(remaining_files)} 张图片"
             )
 
-    # # 线程安全地写入CSV
-    # with csv_lock:
-    #     with open(csv_filename, "a", newline="", encoding="utf-8-sig") as f:
-    #         csv.writer(f).writerow(csv_row)
-    #     print(f"【写入】子文件夹 {subfolder_name} 的结果已写入CSV")
-
-    # return subfolder_name, subfolder_results, total_time
-
-    # 线程安全地写入CSV（带重试机制）
-    max_retries = 3
-    retry_delay = 0.1  # 每次重试间隔0.1秒
-    
-    with csv_lock:
-        for attempt in range(max_retries + 1):  # 0,1,2,3 共4次尝试（首次+3次重试）
-            try:
-                with open(csv_filename, "a", newline="", encoding="utf-8-sig") as f:
-                    csv.writer(f).writerow(csv_row)
-                print(f"【写入】子文件夹 {subfolder_name} 的结果已写入CSV")
-                break  # 成功则跳出重试循环
-            except PermissionError as e:
-                if attempt < max_retries:
-                    print(f"【警告】写入CSV时权限错误（尝试 {attempt+1}/{max_retries}）: {str(e)}")
-                    time.sleep(retry_delay * (attempt + 1))  # 递增等待时间
-                else:
-                    print(f"🔴【错误】CSV写入失败，已达最大重试次数: {str(e)}")
-                    raise  # 重试耗尽后抛出原异常
-            except Exception as e:
-                print(f"🔴【错误】CSV写入时发生意外错误: {str(e)}")
-                raise  # 非权限错误直接抛出
+    # 异步写入CSV
+    csv_queue.put(csv_row)
+    print(f"【写入】子文件夹 {subfolder_name} 的结果已加入写入队列")
     
     return subfolder_name, subfolder_results, total_time
+
+
+def csv_writer_worker(csv_filename, csv_queue):
+    """
+    CSV写入工作线程，负责异步写入数据
+    
+    参数:
+        csv_filename: CSV文件路径
+        csv_queue: 写入数据队列
+    """
+    max_retries = 3
+    retry_delay = 0.1
+    
+    while True:
+        try:
+            # 从队列获取数据，如果队列为空则阻塞等待
+            csv_row = csv_queue.get(timeout=1)
+            
+            # 检查是否为结束信号
+            if csv_row is None:
+                break
+                
+            # 重试写入
+            for attempt in range(max_retries + 1):
+                try:
+                    with open(csv_filename, "a", newline="", encoding="utf-8-sig") as f:
+                        csv.writer(f).writerow(csv_row)
+                    print(f"【写入】数据已写入CSV: {csv_row[0]}")
+                    break
+                except PermissionError as e:
+                    if attempt < max_retries:
+                        print(f"【警告】写入CSV权限错误（重试 {attempt+1}/{max_retries}）")
+                        time.sleep(retry_delay * (attempt + 1))
+                    else:
+                        print(f"🔴【致命错误】CSV写入失败，程序终止: {str(e)}")
+                        os._exit(1)  # 直接终止程序
+                except Exception as e:
+                    print(f"🔴【致命错误】CSV写入异常，程序终止: {str(e)}")
+                    os._exit(1)  # 直接终止程序
+                    
+            csv_queue.task_done()
+            
+        except queue.Empty:
+            # 队列为空，继续等待
+            continue
+        except Exception as e:
+            print(f"🔴【致命错误】写入线程异常，程序终止: {str(e)}")
+            os._exit(1)  # 直接终止程序
 
 
 def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
@@ -546,8 +685,10 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
     # 获取所有子文件夹
     subfolders = [f.path for f in os.scandir(parent_folder) if f.is_dir()]
 
-    # 创建线程锁用于CSV写入
-    csv_lock = threading.Lock()
+    # 创建写入队列和启动写入线程
+    csv_queue = queue.Queue()
+    writer_thread = threading.Thread(target=csv_writer_worker, args=(csv_filename, csv_queue), daemon=True)
+    writer_thread.start()
 
     # 使用线程池执行任务
     results = []
@@ -558,7 +699,7 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
         # 创建任务
         future_to_subfolder = {
             executor.submit(
-                process_subfolder, subfolder, tasks, csv_filename, csv_lock
+                process_subfolder, subfolder, tasks, csv_filename, csv_queue
             ): subfolder
             for subfolder in subfolders
         }
@@ -575,6 +716,10 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
             except Exception as e:
                 print(f"⛔【错误】子文件夹 {subfolder} 处理出错: {e}")
 
+    # 等待所有写入任务完成
+    csv_queue.put(None)  # 发送结束信号
+    writer_thread.join()  # 等待写入线程结束
+    
     total_time = time.time() - start_total
     print(
         f"\n🌾 所有任务完成！总用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
@@ -586,7 +731,7 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
 
 # 使用示例
 if __name__ == "__main__":
-    yaml_path = r"D:\code\garden\……\Q.yml" # 替换为实际的YAML文件路径
+    yaml_path = r"C:\test\q.yaml" # 替换为实际的YAML文件路径
 
     # 调用函数并获取结果
     results = gate_from_yaml(yaml_path)

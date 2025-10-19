@@ -7,6 +7,7 @@
     template: "D:/code/garden/……/q1.jpg" # 模板图片路径
     crop: 30 # 从分帧图片底部向上裁剪 30% 区域
     fade: true # 识别该元素消失
+    limit: 100 # 最多循环 100 次
 
 - skip: 5 # 跳过 5 帧，启动 cactus
 

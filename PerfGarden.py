@@ -275,6 +275,7 @@ def trails(
     fade=False,
     crop=0,
     detector_func=None,  # New parameter to specify which detector function to use
+    limit=0,  # Maximum loop count limit, 0 means no limit
 ):
     """
     处理提供的图片列表，通过设置跳跃间隔进行模板匹配检查
@@ -290,10 +291,11 @@ def trails(
               - 当fade=True时，返回匹配消失时的图片
         crop: 图像裁剪比例，默认为0
         detector_func: 检测器函数，默认为None时使用cattail
+        limit: 最大循环次数限制，默认为0表示不限制
 
     返回值:
         元组 (status, matched_file, result):
-        - status: 状态码，可能值为 "PASS"(成功)、"ERROR"(错误)、"UNFOUND"(未找到匹配)
+        - status: 状态码，可能值为 "PASS"(成功)、"ERROR"(错误)、"UNFOUND"(未找到匹配)、"LIMITED"(达到循环限制)
         - matched_file: 匹配的文件名，如果未匹配则为None
         - result: 检测函数的原始返回结果，未找到匹配时为None
     """
@@ -313,11 +315,19 @@ def trails(
     first_match = None  # 第一个匹配的图片
     result_found = False  # 是否找到结果
     result = None  # 初始化result变量
+    loop_count = 0  # 循环计数器
 
     trails_status = "PASS"  # 返回状态
     trails_matched = None  # 返回文件名
 
     while i < len(image_files):
+        # 检查是否达到循环次数限制
+        if limit > 0 and loop_count >= limit:
+            trails_status = "LIMITED"
+            result = None
+            return (trails_status, trails_matched, result)
+        
+        loop_count += 1  # 增加循环计数
         img_file = image_files[i]
         img_path = os.path.join(folder_path, img_file)
 
@@ -549,6 +559,9 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
         task_kwargs_copy = task_kwargs.copy()
         task_type = task_kwargs_copy.pop("task_type", None)  # 获取任务类型
         template_path = task_kwargs_copy.pop("template_path", None)
+        
+        # 提取limit参数（如果存在）
+        limit_param = task_kwargs_copy.pop("limit", 0)
 
         # 根据任务类型确定检测函数
         detector_func = None
@@ -570,6 +583,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
             folder_path=subfolder,
             template_path=template_path,
             detector_func=detector_func,  # 传递检测函数
+            limit=limit_param,  # 传递limit参数
             **task_kwargs_copy,
         )
         time_taken = time.time() - start_time
@@ -738,7 +752,7 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
 # 使用示例
 if __name__ == "__main__":
     # 硬编码配置，无命令行参数优先
-    yaml_path = r"D:\code\garden\……\Q.yaml"  # 替换为实际的YAML文件路径
+    yaml_path = r"C:\test\q.yaml"  # 替换为实际的YAML文件路径
     
     # 命令行参数解析 python PerfGarden.py --yaml_path "config.yaml" --path "D:\images" --max_threads 8
     parser = argparse.ArgumentParser(description="Perf Garden - 智能性能分帧打标")

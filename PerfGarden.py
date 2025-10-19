@@ -850,28 +850,26 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads, debug=Fal
             result["status"] == "PASS" or result["status"].startswith("SKIP_")
             for result in subfolder_results
         )
-        
+
         if all_pass:
             pass_folders.append(subfolder_name)
         else:
             non_pass_folders.append(subfolder_name)
 
     total_time = time.time() - start_total
-    print(
-        f"🌾 所有任务完成！用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
-    )
+    print(f"🌾 所有任务完成！用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾")
     print(f"结果已保存到: {csv_filename}")
-    
+
     # 输出统计信息
     print(f"📊 ========== 处理结果统计 ==========")
     print(f"✅ 完成任务: {len(pass_folders)} 个")
     print(f"🟠 异常任务: {len(non_pass_folders)} 个")
-    
+
     if non_pass_folders:
         print(f" 异常任务列表:")
         for folder_name in non_pass_folders:
             print(f"  - {folder_name}")
-    
+
     print(f"=======================================")
 
     return results

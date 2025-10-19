@@ -497,7 +497,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None, debug=False):
                 else:
                     # 其他未知格式，记录警告
                     print(
-                        f"🟡 【警告】未知的任务配置格式: {task_type} = {task_config}，将使用默认参数"
+                        f"🟠 【警告】未知的任务配置格式: {task_type} = {task_config}，将使用默认参数"
                     )
 
                 # ========== 参数验证与规范化 ==========
@@ -506,7 +506,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None, debug=False):
                     leap_value = task_kwargs["leap"]
                     if not isinstance(leap_value, int) or leap_value < 1:
                         print(
-                            f"🟡 【警告】{task_type} 的 leap 参数 '{leap_value}' 无效，须为正整数。智能跳帧步长值，已用默认值 3（三倍提速）"
+                            f"🟠 【警告】{task_type} 的 leap 参数 '{leap_value}' 无效，须为正整数。智能跳帧步长值，已用默认值 3（三倍提速）"
                         )
                         task_kwargs["leap"] = 3
 
@@ -515,7 +515,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None, debug=False):
                     fade_value = task_kwargs["fade"]
                     if not isinstance(fade_value, bool):
                         print(
-                            f"🟡 【警告】{task_type} 的 fade 参数 '{fade_value}' 无效，须为布尔值。检查元素是否消失，已用默认值 False（检查出现）"
+                            f"🟠 【警告】{task_type} 的 fade 参数 '{fade_value}' 无效，须为布尔值。检查元素是否消失，已用默认值 False（检查出现）"
                         )
                         task_kwargs["fade"] = False
 
@@ -524,7 +524,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None, debug=False):
                     crop_value = task_kwargs["crop"]
                     if not isinstance(crop_value, int) or not (-99 <= crop_value <= 99):
                         print(
-                            f"🟡 【警告】{task_type} 的 crop 参数 '{crop_value}' 无效，须为整数且在 -99~99。屏幕上下裁剪范围，已用默认值 0（不裁剪）"
+                            f"🟠 【警告】{task_type} 的 crop 参数 '{crop_value}' 无效，须为整数且在 -99~99。屏幕上下裁剪范围，已用默认值 0（不裁剪）"
                         )
                         task_kwargs["crop"] = 0
 
@@ -533,7 +533,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None, debug=False):
                     limit_value = task_kwargs["limit"]
                     if not isinstance(limit_value, int) or limit_value < 0:
                         print(
-                            f"🟡 【警告】{task_type} 的 limit 参数 '{limit_value}' 无效，须为非负整数。最大循环次数，已用默认值 0（不限制）"
+                            f"🟠 【警告】{task_type} 的 limit 参数 '{limit_value}' 无效，须为非负整数。最大循环次数，已用默认值 0（不限制）"
                         )
                         task_kwargs["limit"] = 0
 
@@ -607,7 +607,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue, debug=False):
     # 执行每个任务
     for task_idx, task_kwargs in enumerate(tasks):
         if not remaining_files:
-            print(f"🟡 【警告】子文件夹 {subfolder_name}: 没有剩余图片，跳过剩余任务")
+            print(f"🟠 【警告】子文件夹 {subfolder_name}: 没有剩余图片，跳过剩余任务")
             csv_row.append("未执行")
             continue
 
@@ -652,7 +652,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue, debug=False):
             detector_func = cactus
         # 可以在这里添加更多检测器函数的映射
         else:
-            print(f"🟡 【警告】未知的任务类型 {task_type}，默认使用 cattail")
+            print(f"🟠 【警告】未知的任务类型 {task_type}，默认使用 cattail")
             detector_func = cattail
 
         # 执行任务并计时
@@ -700,7 +700,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue, debug=False):
         # 处理任务失败或继续执行
         if status != "PASS":
             print(
-                f"🟡 【警告】子文件夹 {subfolder_name}: 任务 {task_idx + 1} 返回非PASS状态，跳过剩余任务"
+                f"🟠 【警告】子文件夹 {subfolder_name}: 任务 {task_idx + 1} 返回非PASS状态，跳过剩余任务"
             )
             csv_row.extend(["未执行"] * (len(tasks) - task_idx - 1))
             break
@@ -715,7 +715,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue, debug=False):
 
     # 异步写入CSV
     csv_queue.put(csv_row)
-    print(f"【写入】子文件夹 {subfolder_name} 的结果已加入写入队列")
+    # print(f"【写入】子文件夹 {subfolder_name} 的结果已加入写入队列")
 
     return subfolder_name, subfolder_results, total_time
 
@@ -840,11 +840,39 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads, debug=Fal
     csv_queue.put(None)  # 发送结束信号
     writer_thread.join()  # 等待写入线程结束
 
+    # ========== 统计 PASS 和非 PASS 的子文件夹 ==========
+    pass_folders = []
+    non_pass_folders = []
+
+    for subfolder_name, subfolder_results in results:
+        # 检查是否所有任务都是 PASS 状态
+        all_pass = all(
+            result["status"] == "PASS" or result["status"].startswith("SKIP_")
+            for result in subfolder_results
+        )
+        
+        if all_pass:
+            pass_folders.append(subfolder_name)
+        else:
+            non_pass_folders.append(subfolder_name)
+
     total_time = time.time() - start_total
     print(
-        f"/n🌾 所有任务完成！总用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
+        f"🌾 所有任务完成！用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
     )
     print(f"结果已保存到: {csv_filename}")
+    
+    # 输出统计信息
+    print(f"📊 ========== 处理结果统计 ==========")
+    print(f"✅ 完成任务: {len(pass_folders)} 个")
+    print(f"🟠 异常任务: {len(non_pass_folders)} 个")
+    
+    if non_pass_folders:
+        print(f" 异常任务列表:")
+        for folder_name in non_pass_folders:
+            print(f"  - {folder_name}")
+    
+    print(f"=======================================")
 
     return results
 

@@ -59,7 +59,7 @@ def cattail(
         if crop > 0:
             # 保留底部区域
             new_h = max(1, int(h * (100 - crop) / 100))
-            img = img[h - new_h: h, :]
+            img = img[h - new_h : h, :]
         else:
             # 保留顶部区域
             new_h = max(1, int(h * abs(crop) / 100))
@@ -86,9 +86,15 @@ def cattail(
 
     return (status, matched, confidence, duration)
 
+
 # 仙人掌：图片差异区域占比，容忍局部加载动画，到开始输出文字气泡
 def cactus(
-    img_path: str, template_path: str, threshold: float = 3.2, crop: int = 0, enable_denoising: bool = False, acceleration: int = 2
+    img_path: str,
+    template_path: str,
+    threshold: float = 3.2,
+    crop: int = 0,
+    enable_denoising: bool = False,
+    acceleration: int = 2,
 ) -> tuple:
     """
     图像差异检测函数（支持区域裁剪、加速和降噪控制）
@@ -114,7 +120,11 @@ def cactus(
     start_time = time.time()
 
     # 参数校验
-    if not (0 <= threshold <= 100) or not (-99 <= crop <= 99) or acceleration not in [1, 2, 4]:
+    if (
+        not (0 <= threshold <= 100)
+        or not (-99 <= crop <= 99)
+        or acceleration not in [1, 2, 4]
+    ):
         duration = round(time.time() - start_time, 4)
         return ("EC01", False, 0.00, duration)
 
@@ -139,18 +149,18 @@ def cactus(
         if crop > 0:
             # 保留底部区域
             new_h = max(1, int(h * (100 - crop) / 100))
-            img1 = img1[h - new_h: h, :]
+            img1 = img1[h - new_h : h, :]
         else:
             # 保留顶部区域
             new_h = max(1, int(h * abs(crop) / 100))
             img1 = img1[0:new_h, :]
-            
+
         # 对模板图片执行相同裁剪
         h2, w2 = img2.shape[:2]
         if crop > 0:
             # 保留底部区域
             new_h2 = max(1, int(h2 * (100 - crop) / 100))
-            img2 = img2[h2 - new_h2: h2, :]
+            img2 = img2[h2 - new_h2 : h2, :]
         else:
             # 保留顶部区域
             new_h2 = max(1, int(h2 * abs(crop) / 100))
@@ -182,7 +192,7 @@ def cactus(
 
     # 判断是否超过阈值
     matched = confidence >= threshold
-    
+
     duration = round(time.time() - start_time, 4)
     status = "PASS"
 
@@ -190,6 +200,7 @@ def cactus(
 
 
 # 三叶草：识别圆圈（不推荐）
+
 
 def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
     """
@@ -217,8 +228,7 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
 
     # 安全读取图片为灰度图
     try:
-        gray = cv2.imdecode(np.fromfile(
-            img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+        gray = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             return ("EB02", False, 0, time.time() - start_time)
     except Exception as e:
@@ -230,7 +240,7 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
         if crop > 0:
             # 保留底部区域
             new_h = max(1, int(h * (100 - crop) / 100))
-            gray = gray[h - new_h: h, :]
+            gray = gray[h - new_h : h, :]
         else:
             # 保留顶部区域
             new_h = max(1, int(h * abs(crop) / 100))
@@ -243,12 +253,12 @@ def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
     circlEB = cv2.HoughCircles(
         blur,
         cv2.HOUGH_GRADIENT,
-        dp=1,           # 图像分辨率与累加器分辨率之比（1:1保持原始分辨率，值越大检测越粗糙）
-        minDist=100,    # 圆心间最小距离（防止重叠圆检测，需根据目标间距调整）
-        param1=90,     # Canny边缘检测高阈值（值越大边缘检测要求越严格，建议50-150）
-        param2=32,      # 圆心累加器阈值（值越小检测越宽松，假圆越多，建议10-50）
-        minRadius=20,   # 目标最小半径（根据实际目标尺寸设置下限）
-        maxRadius=25    # 目标最大半径（根据实际目标尺寸设置上限）
+        dp=1,  # 图像分辨率与累加器分辨率之比（1:1保持原始分辨率，值越大检测越粗糙）
+        minDist=100,  # 圆心间最小距离（防止重叠圆检测，需根据目标间距调整）
+        param1=90,  # Canny边缘检测高阈值（值越大边缘检测要求越严格，建议50-150）
+        param2=32,  # 圆心累加器阈值（值越小检测越宽松，假圆越多，建议10-50）
+        minRadius=20,  # 目标最小半径（根据实际目标尺寸设置下限）
+        maxRadius=25,  # 目标最大半径（根据实际目标尺寸设置上限）
     )
 
     # 计算结果
@@ -276,6 +286,7 @@ def trails(
     crop=0,
     detector_func=None,  # New parameter to specify which detector function to use
     limit=0,  # Maximum loop count limit, 0 means no limit
+    debug=False,  # Debug mode switch
 ):
     """
     处理提供的图片列表，通过设置跳跃间隔进行模板匹配检查
@@ -285,13 +296,13 @@ def trails(
         folder_path: 图片文件夹路径
         template_path: 模板图片路径
         threshold: 匹配阈值，默认为None，使用检测器函数的默认值
-        leap: 检查间隔，默认为2，即每隔一张图片检查一次
-        fade: 是否在匹配后继续进展直到匹配消失，默认为False
+        leap: 检查间隔，默认为3，必须为正整数
+        fade: 是否在匹配后继续进展直到匹配消失，默认为False，必须为布尔值
               - 当fade=False时，返回首个匹配成功的图片
               - 当fade=True时，返回匹配消失时的图片
         crop: 图像裁剪比例，默认为0
         detector_func: 检测器函数，默认为None时使用cattail
-        limit: 最大循环次数限制，默认为0表示不限制
+        limit: 最大循环次数限制，默认为0表示不限制，必须为非负整数
 
     返回值:
         元组 (status, matched_file, result):
@@ -322,11 +333,11 @@ def trails(
 
     while i < len(image_files):
         # 检查是否达到循环次数限制
-        if limit > 0 and loop_count >= limit:
+        if limit and loop_count >= limit:
             trails_status = "LIMITED"
             result = None
             return (trails_status, trails_matched, result)
-        
+
         loop_count += 1  # 增加循环计数
         img_file = image_files[i]
         img_path = os.path.join(folder_path, img_file)
@@ -343,7 +354,14 @@ def trails(
             detector_kwargs["threshold"] = threshold
 
         result = detector_func(**detector_kwargs)  # 使用指定的检测函数
-        # print(f"{img_file}: {result}")  # 🧐 详细调试日志
+
+        if debug:  # 详细调试日志
+            status, matched, confidence, duration = result
+            match_status = "✅ TRUE" if matched else "❌ FALSE"
+            detector_name = detector_func.__name__
+            print(
+                f"【调试：{detector_name}】{img_file} | 状态:{status} | {match_status} | 阈值:{confidence} | 耗时:{duration}s | 循环:{loop_count}"
+            )
 
         # 解包结果元组
         status, matched, confidence, duration = result
@@ -374,7 +392,10 @@ def trails(
             if matched:
                 # 回退并开始逐个检查
                 i = max(0, i - (leap - 1))  # 回退leap-1张图片
-                # print(f"匹配成功，回退到 {image_files[i]} 开始逐个检查")
+                if debug:
+                    print(
+                        f"【调试：智能跳帧】当前 leap: {leap}，检测到目标！回跳至 {image_files[i]} 逐帧检查"
+                    )
                 leap = 1  # 设置步长为1
                 continue
 
@@ -393,21 +414,31 @@ def trails(
     return (trails_status, trails_matched, result)
 
 
-def gate_from_yaml(yaml_path, max_threads=None, path=None):
+def gate_from_yaml(yaml_path, max_threads=None, path=None, debug=False):
     """
     从YAML文件读取配置并处理文件夹
 
     参数:
         yaml_path: YAML配置文件路径
         max_threads: 最大线程数，如果为None则从YAML配置中读取或使用默认值
-        path: 母文件夹路径，如果指定则覆盖YAML配置中的path
+        path: 总文件夹路径，如果指定则覆盖YAML配置中的path
+        debug: Debug模式开关，默认为False
 
     返回:
         处理结果列表
     """
+    # 验证YAML文件是否存在
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"⛔ 【错误】YAML配置文件不存在: {yaml_path}")
+
     # 读取YAML配置
-    with open(yaml_path, "r", encoding="utf-8") as file:
-        config = yaml.safe_load(file)
+    try:
+        with open(yaml_path, "r", encoding="utf-8") as file:
+            config = yaml.safe_load(file)
+    except Exception as e:
+        raise RuntimeError(
+            f"⛔ 【错误】读取YAML配置出错，检查格式（试试 yamllint.com）: {yaml_path}\n错误信息: {str(e)}"
+        )
 
     # 提取路径和任务信息
     parent_folder = None
@@ -419,7 +450,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None):
         if not isinstance(item, dict):
             continue
 
-        # 提取母文件夹路径
+        # 提取总文件夹路径
         if "path" in item:
             parent_folder = os.path.normpath(item["path"])
             continue
@@ -435,8 +466,7 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None):
                 continue
 
             # 更新任务类型计数和表头
-            task_type_counts[task_type] = task_type_counts.get(
-                task_type, 0) + 1
+            task_type_counts[task_type] = task_type_counts.get(task_type, 0) + 1
             task_headers.append(f"{task_type}{task_type_counts[task_type]}")
 
             # 提取任务参数
@@ -451,16 +481,14 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None):
                     for param in task_config:
                         for key, value in param.items():
                             if key == "template":
-                                task_kwargs["template_path"] = os.path.normpath(
-                                    value)
+                                task_kwargs["template_path"] = os.path.normpath(value)
                             else:
                                 task_kwargs[key] = value
                 elif isinstance(task_config, dict):
                     # 新版格式: task_config 是一个字典
                     for key, value in task_config.items():
                         if key == "template":
-                            task_kwargs["template_path"] = os.path.normpath(
-                                value)
+                            task_kwargs["template_path"] = os.path.normpath(value)
                         else:
                             task_kwargs[key] = value
                 elif task_config is None:
@@ -468,16 +496,66 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None):
                     pass  # 无需添加额外参数，使用默认参数
                 else:
                     # 其他未知格式，记录警告
-                    print(f"⚠️【警告】未知的任务配置格式: {task_type} = {task_config}，将使用默认参数")
+                    print(
+                        f"🟡 【警告】未知的任务配置格式: {task_type} = {task_config}，将使用默认参数"
+                    )
+
+                # ========== 参数验证与规范化 ==========
+                # 验证 leap 参数
+                if "leap" in task_kwargs:
+                    leap_value = task_kwargs["leap"]
+                    if not isinstance(leap_value, int) or leap_value < 1:
+                        print(
+                            f"🟡 【警告】{task_type} 的 leap 参数 '{leap_value}' 无效，须为正整数。智能跳帧步长值，已用默认值 3（三倍提速）"
+                        )
+                        task_kwargs["leap"] = 3
+
+                # 验证 fade 参数
+                if "fade" in task_kwargs:
+                    fade_value = task_kwargs["fade"]
+                    if not isinstance(fade_value, bool):
+                        print(
+                            f"🟡 【警告】{task_type} 的 fade 参数 '{fade_value}' 无效，须为布尔值。检查元素是否消失，已用默认值 False（检查出现）"
+                        )
+                        task_kwargs["fade"] = False
+
+                # 验证 crop 参数
+                if "crop" in task_kwargs:
+                    crop_value = task_kwargs["crop"]
+                    if not isinstance(crop_value, int) or not (-99 <= crop_value <= 99):
+                        print(
+                            f"🟡 【警告】{task_type} 的 crop 参数 '{crop_value}' 无效，须为整数且在 -99~99。屏幕上下裁剪范围，已用默认值 0（不裁剪）"
+                        )
+                        task_kwargs["crop"] = 0
+
+                # 验证 limit 参数
+                if "limit" in task_kwargs:
+                    limit_value = task_kwargs["limit"]
+                    if not isinstance(limit_value, int) or limit_value < 0:
+                        print(
+                            f"🟡 【警告】{task_type} 的 limit 参数 '{limit_value}' 无效，须为非负整数。最大循环次数，已用默认值 0（不限制）"
+                        )
+                        task_kwargs["limit"] = 0
 
             tasks.append(task_kwargs)
 
     # 命令行参数path优先级最高，覆盖YAML配置
     if path is not None:
         parent_folder = os.path.normpath(path)
-    
+
+    # 验证总文件夹路径
     if not parent_folder:
-        raise ValueError("YAML配置中未指定母文件夹路径")
+        raise ValueError("⛔ 【错误】未指定总文件夹 path 路径（YAML配置或命令行参数）")
+    if not os.path.isdir(parent_folder):
+        raise NotADirectoryError(f"⛔ 【错误】总文件夹 path 路径无效: {parent_folder}")
+
+    # 验证模板图片路径
+    for idx, task_kwargs in enumerate(tasks):
+        template_path = task_kwargs.get("template_path")
+        if template_path and not os.path.exists(template_path):
+            raise FileNotFoundError(
+                f"⛔ 【错误】任务 {idx + 1} 的模板图片不存在: {template_path}"
+            )
 
     if not tasks:
         tasks = [{}]
@@ -488,10 +566,10 @@ def gate_from_yaml(yaml_path, max_threads=None, path=None):
         max_threads = os.cpu_count() or 8  # 默认使用CPU核心数
 
     # 执行任务处理
-    return gate_multi_thread(parent_folder, tasks, task_headers, max_threads)
+    return gate_multi_thread(parent_folder, tasks, task_headers, max_threads, debug)
 
 
-def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
+def process_subfolder(subfolder, tasks, csv_filename, csv_queue, debug=False):
     """
     处理单个子文件夹的所有任务，在单独线程中执行
 
@@ -500,6 +578,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
         tasks: 任务参数列表
         csv_filename: CSV结果文件路径
         csv_queue: 用于异步写入的队列
+        debug: Debug模式开关
 
     返回:
         (subfolder_name, subfolder_results, total_time): 处理结果和耗时
@@ -528,7 +607,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
     # 执行每个任务
     for task_idx, task_kwargs in enumerate(tasks):
         if not remaining_files:
-            print(f"🟠【警告】子文件夹 {subfolder_name}: 没有剩余图片，跳过剩余任务")
+            print(f"🟡 【警告】子文件夹 {subfolder_name}: 没有剩余图片，跳过剩余任务")
             csv_row.append("未执行")
             continue
 
@@ -559,7 +638,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
         task_kwargs_copy = task_kwargs.copy()
         task_type = task_kwargs_copy.pop("task_type", None)  # 获取任务类型
         template_path = task_kwargs_copy.pop("template_path", None)
-        
+
         # 提取limit参数（如果存在）
         limit_param = task_kwargs_copy.pop("limit", 0)
 
@@ -573,17 +652,28 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
             detector_func = cactus
         # 可以在这里添加更多检测器函数的映射
         else:
-            print(f"⚠️【警告】未知的任务类型 {task_type}，默认使用 cattail")
+            print(f"🟡 【警告】未知的任务类型 {task_type}，默认使用 cattail")
             detector_func = cattail
 
         # 执行任务并计时
         start_time = time.time()
+
+        # Debug模式：输出任务配置信息
+        if debug:
+            threshold_value = task_kwargs_copy.get("threshold", "默认值")
+            fade_value = task_kwargs_copy.get("fade", False)
+            crop_value = task_kwargs_copy.get("crop", 0)
+            print(
+                f"ℹ️ 【调试：任务配置】检测方法: {task_type} | 目标阈值: {threshold_value} | 消失: {fade_value} | 裁剪: {crop_value}"
+            )
+
         status, matched_file, _ = trails(
             image_files=remaining_files,
             folder_path=subfolder,
             template_path=template_path,
             detector_func=detector_func,  # 传递检测函数
             limit=limit_param,  # 传递limit参数
+            debug=debug,  # 传递debug参数
             **task_kwargs_copy,
         )
         time_taken = time.time() - start_time
@@ -610,7 +700,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
         # 处理任务失败或继续执行
         if status != "PASS":
             print(
-                f"🟠【警告】子文件夹 {subfolder_name}: 任务 {task_idx + 1} 返回非PASS状态，跳过剩余任务"
+                f"🟡 【警告】子文件夹 {subfolder_name}: 任务 {task_idx + 1} 返回非PASS状态，跳过剩余任务"
             )
             csv_row.extend(["未执行"] * (len(tasks) - task_idx - 1))
             break
@@ -618,7 +708,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
         # 更新剩余图片列表
         if matched_file in remaining_files:
             match_index = remaining_files.index(matched_file)
-            remaining_files = remaining_files[match_index + 1:]
+            remaining_files = remaining_files[match_index + 1 :]
             print(
                 f"【继续】子文件夹 {subfolder_name}: 继续已处理图片，剩余 {len(remaining_files)} 张图片"
             )
@@ -626,30 +716,30 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
     # 异步写入CSV
     csv_queue.put(csv_row)
     print(f"【写入】子文件夹 {subfolder_name} 的结果已加入写入队列")
-    
+
     return subfolder_name, subfolder_results, total_time
 
 
 def csv_writer_worker(csv_filename, csv_queue):
     """
     CSV写入工作线程，负责异步写入数据
-    
+
     参数:
         csv_filename: CSV文件路径
         csv_queue: 写入数据队列
     """
     max_retries = 3
     retry_delay = 0.1
-    
+
     while True:
         try:
             # 从队列获取数据，如果队列为空则阻塞等待
             csv_row = csv_queue.get(timeout=1)
-            
+
             # 检查是否为结束信号
             if csv_row is None:
                 break
-                
+
             # 重试写入
             for attempt in range(max_retries + 1):
                 try:
@@ -659,34 +749,37 @@ def csv_writer_worker(csv_filename, csv_queue):
                     break
                 except PermissionError as e:
                     if attempt < max_retries:
-                        print(f"【警告】写入CSV权限错误（重试 {attempt+1}/{max_retries}）")
+                        print(
+                            f"【写入】写入CSV权限错误（重试 {attempt+1}/{max_retries}）"
+                        )
                         time.sleep(retry_delay * (attempt + 1))
                     else:
-                        print(f"🔴【致命错误】CSV写入失败，程序终止: {str(e)}")
+                        print(f"⛔ 【错误】CSV写入失败，程序终止: {str(e)}")
                         os._exit(1)  # 直接终止程序
                 except Exception as e:
-                    print(f"🔴【致命错误】CSV写入异常，程序终止: {str(e)}")
+                    print(f"⛔ 【错误】CSV写入异常，程序终止: {str(e)}")
                     os._exit(1)  # 直接终止程序
-                    
+
             csv_queue.task_done()
-            
+
         except queue.Empty:
             # 队列为空，继续等待
             continue
         except Exception as e:
-            print(f"🔴【致命错误】写入线程异常，程序终止: {str(e)}")
+            print(f"⛔ 【错误】写入线程异常，程序终止: {str(e)}")
             os._exit(1)  # 直接终止程序
 
 
-def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
+def gate_multi_thread(parent_folder, tasks, task_headers, max_threads, debug=False):
     """
-    使用多线程处理母文件夹内所有子文件夹
+    使用多线程处理总文件夹内所有子文件夹
 
     参数:
-        parent_folder: 母文件夹路径
+        parent_folder: 总文件夹路径
         tasks: 任务参数列表
         task_headers: CSV表头列表
         max_threads: 最大线程数
+        debug: Debug模式开关
 
     返回:
         处理结果列表
@@ -707,8 +800,15 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
 
     # 创建写入队列和启动写入线程
     csv_queue = queue.Queue()
-    writer_thread = threading.Thread(target=csv_writer_worker, args=(csv_filename, csv_queue), daemon=True)
+    writer_thread = threading.Thread(
+        target=csv_writer_worker, args=(csv_filename, csv_queue), daemon=True
+    )
     writer_thread.start()
+
+    # Debug模式强制单线程
+    if debug:
+        max_threads = 1
+        print(f"ℹ️ 【调试模式】已启用！激活调试日志，强制单线程")
 
     # 使用线程池执行任务
     results = []
@@ -719,7 +819,7 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
         # 创建任务
         future_to_subfolder = {
             executor.submit(
-                process_subfolder, subfolder, tasks, csv_filename, csv_queue
+                process_subfolder, subfolder, tasks, csv_filename, csv_queue, debug
             ): subfolder
             for subfolder in subfolders
         }
@@ -731,15 +831,15 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
                 subfolder_name, subfolder_results, subfolder_time = future.result()
                 results.append((subfolder_name, subfolder_results))
                 print(
-                    f"✅【完成】子文件夹 {subfolder_name} 处理完成，耗时: {subfolder_time:.2f}秒"
+                    f"✅ 【完成】子文件夹 {subfolder_name} 处理完成，耗时: {subfolder_time:.2f}秒"
                 )
             except Exception as e:
-                print(f"⛔【错误】子文件夹 {subfolder} 处理出错: {e}")
+                print(f"⛔ 【错误】子文件夹 {subfolder} 处理出错: {e}")
 
     # 等待所有写入任务完成
     csv_queue.put(None)  # 发送结束信号
     writer_thread.join()  # 等待写入线程结束
-    
+
     total_time = time.time() - start_total
     print(
         f"/n🌾 所有任务完成！总用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
@@ -751,19 +851,30 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
 
 # 使用示例
 if __name__ == "__main__":
-    # 硬编码配置，无命令行参数优先
-    yaml_path = r"C:\test\q.yaml"  # 替换为实际的YAML文件路径
-    
-    # 命令行参数解析 python PerfGarden.py --yaml_path "config.yaml" --path "D:\images" --max_threads 8
+    # ========== 硬编码配置（方便调试）==========
+    YAML_PATH = r"C:\test\q.yaml"  # YAML配置文件路径
+    DEBUG = True  # Debug 模式
+
+    # ========== 命令行参数解析 ==========
+    # 使用示例: python PerfGarden.py --yaml_path "config.yaml" --path "D:\images" --max_threads 8 --debug
     parser = argparse.ArgumentParser(description="Perf Garden - 智能性能分帧打标")
     parser.add_argument("--yaml_path", type=str, help="YAML配置文件路径")
-    parser.add_argument("--path", type=str, help="母文件夹路径")
+    parser.add_argument("--path", type=str, help="总文件夹路径")
     parser.add_argument("--max_threads", type=int, help="最大线程数")
+    parser.add_argument(
+        "--debug", action="store_true", help="启用Debug模式（激活调试日志，强制单线程）"
+    )
     args = parser.parse_args()
-    
-    # 调用函数并获取结果
+
+    # yaml_path 和 debug: 命令行 > 硬编码
+    # path 和 max_threads: 命令行 > YAML配置（在gate_from_yaml中处理）
+    final_yaml_path = args.yaml_path or YAML_PATH
+    final_debug = args.debug or DEBUG
+
+    # 执行主函数
     results = gate_from_yaml(
-        yaml_path=args.yaml_path or yaml_path,
+        yaml_path=final_yaml_path,
         max_threads=args.max_threads,
-        path=args.path
+        path=args.path,
+        debug=final_debug,
     )

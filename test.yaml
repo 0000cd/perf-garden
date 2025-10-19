@@ -1,0 +1,17 @@
+- path: "D:/……/分帧目录" # 分帧的总文件夹
+- max_threads: 10 # 最大线程数
+
+- skip: 10 # 可选，跳过开头无用的帧
+
+- cattail: # 识别起始帧
+    template: "D:/code/garden/……/q1.jpg" # 模板图片路径
+    crop: 30 # 从分帧图片底部向上裁剪 30% 区域
+    fade: true # 识别该元素消失
+
+- skip: 5 # 跳过 5 帧，启动 cactus
+
+- cactus: # 识别首字帧
+    crop: -50 # 从分帧图片顶部向下裁剪 50% 区域
+
+- cattail: # 识别结束帧
+    template: "D:/code/garden/……/q2.jpg"

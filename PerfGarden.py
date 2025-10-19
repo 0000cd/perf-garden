@@ -1,3 +1,4 @@
+import argparse
 import concurrent.futures
 import csv
 import os
@@ -11,7 +12,7 @@ import numpy as np  # pip install numpy
 import yaml  # pip install pyyaml
 
 
-# 猫尾草：图片模板匹配，按钮标题等查找静态首尾帧
+# 猫尾草：静态图片模板匹配，按钮标题等查找静态首尾帧
 def cattail(
     img_path: str, template_path: str, threshold: float = 0.9, crop: int = 0
 ) -> tuple:
@@ -87,7 +88,7 @@ def cattail(
 
 # 仙人掌：图片差异区域占比，容忍局部加载动画，到开始输出文字气泡
 def cactus(
-    img_path: str, template_path: str, threshold: float = 1.0, crop: int = 0, enable_denoising: bool = False, acceleration: int = 2
+    img_path: str, template_path: str, threshold: float = 3.2, crop: int = 0, enable_denoising: bool = False, acceleration: int = 2
 ) -> tuple:
     """
     图像差异检测函数（支持区域裁剪、加速和降噪控制）
@@ -188,7 +189,7 @@ def cactus(
     return (status, matched, confidence, duration)
 
 
-# 三叶草：图片模板匹配
+# 三叶草：识别圆圈（不推荐）
 
 def blover(img_path, template_path=None, threshold: int = 1, crop: int = 0):
     """
@@ -287,7 +288,7 @@ def trails(
         fade: 是否在匹配后继续进展直到匹配消失，默认为False
               - 当fade=False时，返回首个匹配成功的图片
               - 当fade=True时，返回匹配消失时的图片
-        crop: 图像裁剪比例，默认为50
+        crop: 图像裁剪比例，默认为0
         detector_func: 检测器函数，默认为None时使用cattail
 
     返回值:
@@ -332,27 +333,27 @@ def trails(
             detector_kwargs["threshold"] = threshold
 
         result = detector_func(**detector_kwargs)  # 使用指定的检测函数
-        print(f"{img_file}: {result}")  # 🧐 详细调试日志
+        # print(f"{img_file}: {result}")  # 🧐 详细调试日志
 
         # 解包结果元组
         status, matched, confidence, duration = result
 
         # 验证status，如果不是PASS则结束任务
         if status != "PASS":
-            # print(f"\n任务结束，错误代码: {status}")
+            # print(f"/n任务结束，错误代码: {status}")
             trails_status = "ERROR"
             return (trails_status, trails_matched, result)
 
         if leap == 1:  # 在逐个检查模式
             if waiting_for_fade:  # 已经找到匹配，等待消失
                 if not matched:  # 匹配消失
-                    # print(f"\n在 {img_file} 消失")
+                    # print(f"/n在 {img_file} 消失")
                     result_found = True
                     trails_matched = img_file
                     break
             elif matched:  # 找到匹配
                 if not fade:  # 标准模式，找到匹配就结束
-                    # print(f"\n在 {img_file} 出现")
+                    # print(f"/n在 {img_file} 出现")
                     result_found = True
                     trails_matched = img_file
                     break
@@ -371,24 +372,25 @@ def trails(
 
     # 如果所有都没有找到结果，输出UNFOUND
     if not result_found:
-        # print("\nUNFOUND")
+        # print("/nUNFOUND")
         trails_status = "UNFOUND"
         result = None
         return (trails_status, trails_matched, result)
 
     # 输出总耗时
     total_duration = time.time() - start_time
-    # print(f"\n总耗时: {total_duration:.2f} 秒")
+    # print(f"/n总耗时: {total_duration:.2f} 秒")
     return (trails_status, trails_matched, result)
 
 
-def gate_from_yaml(yaml_path, max_threads=None):
+def gate_from_yaml(yaml_path, max_threads=None, path=None):
     """
     从YAML文件读取配置并处理文件夹
 
     参数:
         yaml_path: YAML配置文件路径
         max_threads: 最大线程数，如果为None则从YAML配置中读取或使用默认值
+        path: 母文件夹路径，如果指定则覆盖YAML配置中的path
 
     返回:
         处理结果列表
@@ -460,6 +462,10 @@ def gate_from_yaml(yaml_path, max_threads=None):
 
             tasks.append(task_kwargs)
 
+    # 命令行参数path优先级最高，覆盖YAML配置
+    if path is not None:
+        parent_folder = os.path.normpath(path)
+    
     if not parent_folder:
         raise ValueError("YAML配置中未指定母文件夹路径")
 
@@ -469,7 +475,7 @@ def gate_from_yaml(yaml_path, max_threads=None):
 
     # 如果未指定最大线程数，使用默认值
     if max_threads is None:
-        max_threads = os.cpu_count() or 4  # 默认使用CPU核心数
+        max_threads = os.cpu_count() or 8  # 默认使用CPU核心数
 
     # 执行任务处理
     return gate_multi_thread(parent_folder, tasks, task_headers, max_threads)
@@ -502,7 +508,7 @@ def process_subfolder(subfolder, tasks, csv_filename, csv_queue):
     image_files.sort(
         key=lambda s: [
             int(text) if text.isdigit() else text.lower()
-            for text in re.split(r"(\d+)", s)
+            for text in re.split(r"(/d+)", s)
         ]
     )
 
@@ -722,7 +728,7 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
     
     total_time = time.time() - start_total
     print(
-        f"\n🌾 所有任务完成！总用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
+        f"/n🌾 所有任务完成！总用时: {total_time:.2f}秒，Have A Nice Day~ 🌾🌾🌾🌾🌾🌾"
     )
     print(f"结果已保存到: {csv_filename}")
 
@@ -731,7 +737,19 @@ def gate_multi_thread(parent_folder, tasks, task_headers, max_threads):
 
 # 使用示例
 if __name__ == "__main__":
-    yaml_path = r"C:\test\q.yaml" # 替换为实际的YAML文件路径
-
+    # 硬编码配置，无命令行参数优先
+    yaml_path = r"D:\code\garden\……\Q.yaml"  # 替换为实际的YAML文件路径
+    
+    # 命令行参数解析 python PerfGarden.py --yaml_path "config.yaml" --path "D:\images" --max_threads 8
+    parser = argparse.ArgumentParser(description="Perf Garden - 智能性能分帧打标")
+    parser.add_argument("--yaml_path", type=str, help="YAML配置文件路径")
+    parser.add_argument("--path", type=str, help="母文件夹路径")
+    parser.add_argument("--max_threads", type=int, help="最大线程数")
+    args = parser.parse_args()
+    
     # 调用函数并获取结果
-    results = gate_from_yaml(yaml_path)
+    results = gate_from_yaml(
+        yaml_path=args.yaml_path or yaml_path,
+        max_threads=args.max_threads,
+        path=args.path
+    )
